@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+src/stock_download/__init__.py
+src/stock_download/cli.py
+src/stock_download/client.py
+src/stock_download/deep_data.py
+src/stock_download/finance.py
+src/stock_download/index_fund.py
+src/stock_download/money_flow.py
+src/stock_download/quote.py
+src/stock_download.egg-info/PKG-INFO
+src/stock_download.egg-info/SOURCES.txt
+src/stock_download.egg-info/dependency_links.txt
+src/stock_download.egg-info/entry_points.txt
+src/stock_download.egg-info/requires.txt
+src/stock_download.egg-info/top_level.txt

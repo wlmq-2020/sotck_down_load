@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stock_download"
+version = "0.1.0"
+authors = [
+  { name="Your Name", email="your.email@example.com" },
+]
+description = "基于pysnowball的A股数据获取工具"
+requires-python = ">=3.10"
+dependencies = [
+  "pysnowball>=0.1.8",
+  "pandas>=2.2.0",
+  "click>=8.1.0",
+  "python-dotenv>=1.0.0",
+  "openpyxl>=3.1.0",
+  "tenacity>=8.2.0",
+  "ratelimit>=2.2.1",
+]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "F", "I", "W"]
+lint.ignore = ["E501"]
