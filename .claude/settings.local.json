@@ -18,7 +18,8 @@
       "Bash(python temp/test_return_keys.py)",
       "Bash(python main.py filter-stocks --update)",
       "WebSearch",
-      "Read(//量化交易项目/**)"
+      "Read(//量化交易项目/**)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
