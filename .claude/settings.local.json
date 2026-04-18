@@ -19,7 +19,8 @@
       "Bash(python main.py filter-stocks --update)",
       "WebSearch",
       "Read(//量化交易项目/**)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(git push *)"
     ]
   }
 }
