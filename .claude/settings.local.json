@@ -20,7 +20,10 @@
       "WebSearch",
       "Read(//量化交易项目/**)",
       "WebFetch(domain:github.com)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git:*)",
+      "Bash(clip)",
+      "Bash(ssh:*)"
     ]
   }
 }
