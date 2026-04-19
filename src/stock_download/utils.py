@@ -42,12 +42,348 @@ def check_root_dir_py_files() -> None:
 
     print("目录规范检测通过")
 
+def init_project() -> tuple[list[str], str]:
+    """初始化项目，创建所需目录、生成.env模板
+    :return: 创建的目录列表，.env模板路径
+    """
+    # 创建需要的目录
+    dirs = [
+        "./data",
+        "./logs",
+        "./temp",
+        "./tests",
+        "./data/index"
+    ]
+    created_dirs = []
+    for d in dirs:
+        if not os.path.exists(d):
+            os.makedirs(d)
+            created_dirs.append(d)
+
+    # 生成.env模板
+    env_template_path = "./.env.template"
+    env_created = False
+    if not os.path.exists(env_template_path):
+        env_content = """# 雪球Cookie，从浏览器登录雪球后获取
+XUEQIU_COOKIE=your_xueqiu_cookie_here
+
+# 请求延迟配置，单位秒
+REQUEST_DELAY_MIN=1
+REQUEST_DELAY_MAX=2
+
+# 每分钟最多请求次数
+MAX_REQUESTS_PER_MINUTE=30
+"""
+        with open(env_template_path, "w", encoding="utf-8") as f:
+            f.write(env_content)
+        env_created = True
+
+    return created_dirs, env_template_path if env_created else None
+
+
+def validate_stock_data(symbols: list[str], validate_type: str = "all", auto_fix: bool = False,
+                       start_date: str = "2021-01-01", end_date: str = None, debug: bool = False) -> tuple[list[dict], int, int]:
+    """校验已下载的股票数据质量
+    :param symbols: 股票代码列表
+    :param validate_type: 校验数据类型：all/kline/quote/finance/money_flow
+    :param auto_fix: 是否自动修复缺失的K线数据
+    :param start_date: K线校验开始日期
+    :param end_date: K线校验结束日期，默认今日
+    :param debug: 是否开启调试模式
+    :return: 报告数据列表，成功计数，失败计数
+    """
+    from datetime import datetime
+
+    from .quote import QuoteFetcher
+
+    # 设置默认结束日期为今日
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+    report_data = []
+    success_count = 0
+    fail_count = 0
+
+    fetcher = QuoteFetcher()
+
+    for symbol in symbols:
+        try:
+            # 读取已下载的K线数据
+            json_path = f"./data/{symbol}.json"
+            if not os.path.exists(json_path):
+                report_item = {
+                    '股票代码': symbol,
+                    '校验时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    '异常类型': '文件不存在',
+                    '异常日期': '',
+                    '异常内容': f'JSON数据文件不存在：{json_path}',
+                    '状态': '失败'
+                }
+                report_data.append(report_item)
+                fail_count += 1
+                continue
+
+            # 加载数据
+            data = DataSaver.load(json_path, format='json')
+            if not data:
+                report_item = {
+                    "股票代码": symbol,
+                    "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "异常类型": "数据为空",
+                    "异常日期": "",
+                    "异常内容": "JSON文件内容为空",
+                    "状态": "失败"
+                }
+                report_data.append(report_item)
+                fail_count += 1
+                continue
+
+            # 初始化所有校验结果
+            all_valid = True
+
+            # ------------------- 校验K线数据 -------------------
+            if validate_type in ['all', 'kline']:
+                if 'kline' in data and data['kline']:
+                    valid, anomalies, missing_dates = validate_kline_data(data['kline'], start_date, end_date)
+                    if not valid:
+                        all_valid = False
+                        for anomaly in anomalies:
+                            report_item = {
+                                "股票代码": symbol,
+                                "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "异常类型": anomaly["异常类型"],
+                                "异常日期": anomaly["异常日期"],
+                                "异常内容": anomaly["异常内容"],
+                                "状态": "异常"
+                            }
+                            report_data.append(report_item)
+                        fail_count += len(anomalies)
+
+                        # K线自动修复
+                        if auto_fix and missing_dates:
+                            try:
+                                # 计算需要下载的天数：从最早缺失日期到今日
+                                min_missing_date = min(missing_dates)
+                                days_diff = (datetime.now() - datetime.strptime(min_missing_date, "%Y-%m-%d")).days + 1
+
+                                # 下载这段时间的全部K线
+                                df_new = fetcher.get_history_kline(symbol, days=days_diff)
+                                new_kline = df_new.to_dict(orient="records")
+
+                                # 只保留缺失的日期
+                                added_count = 0
+                                for item in new_kline:
+                                    if item['交易日期'] in missing_dates:
+                                        data['kline'].append(item)
+                                        added_count += 1
+
+                                if added_count > 0:
+                                    # 去重排序
+                                    data['kline'] = sorted({item['交易日期']: item for item in data['kline']}.values(), key=lambda x: x['交易日期'])
+                                    # 保存更新后的数据（使用DataSaver覆盖更新kline字段，不影响其他字段）
+                                    DataSaver.save(data['kline'], json_path, format='json', mode='cover', field_name='kline', unique_key='交易日期')
+
+                                    # 新增修复记录到报告
+                                    report_item = {
+                                        "股票代码": symbol,
+                                        "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        "异常类型": "已修复",
+                                        "异常日期": ",".join(missing_dates[:10]),
+                                        "异常内容": f"K线自动修复完成，成功补全{added_count}条缺失数据",
+                                        "状态": "已修复"
+                                    }
+                                    report_data.append(report_item)
+                            except Exception:
+                                if debug:
+                                    import traceback
+                                    traceback.print_exc()
+                else:
+                    report_item = {
+                        "股票代码": symbol,
+                        "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "异常类型": "K线数据缺失",
+                        "异常日期": "",
+                        "异常内容": "JSON文件缺少kline字段或K线数据为空",
+                        "状态": "异常"
+                    }
+                    report_data.append(report_item)
+                    fail_count += 1
+                    all_valid = False
+
+            # ------------------- 校验行情数据 -------------------
+            if validate_type in ['all', 'quote']:
+                if 'quote' in data and data['quote']:
+                    valid, anomalies = validate_quote_data(data['quote'])
+                    if not valid:
+                        all_valid = False
+                        for anomaly in anomalies:
+                            report_item = {
+                                "股票代码": symbol,
+                                "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "异常类型": anomaly["异常类型"],
+                                "异常日期": "",
+                                "异常内容": anomaly["异常内容"],
+                                "状态": "异常"
+                            }
+                            report_data.append(report_item)
+                        fail_count += len(anomalies)
+                else:
+                    report_item = {
+                        "股票代码": symbol,
+                        "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "异常类型": "行情数据缺失",
+                        "异常日期": "",
+                        "异常内容": "JSON文件缺少quote字段或行情数据为空",
+                        "状态": "异常"
+                    }
+                    report_data.append(report_item)
+                    fail_count += 1
+                    all_valid = False
+
+            # ------------------- 校验财务数据 -------------------
+            if validate_type in ['all', 'finance']:
+                if 'finance' in data and data['finance']:
+                    valid, anomalies = validate_finance_data(data['finance'])
+                    if not valid:
+                        all_valid = False
+                        for anomaly in anomalies:
+                            report_item = {
+                                "股票代码": symbol,
+                                "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "异常类型": anomaly["异常类型"],
+                                "异常日期": anomaly.get("异常日期", ""),
+                                "异常内容": anomaly["异常内容"],
+                                "状态": "异常"
+                            }
+                            report_data.append(report_item)
+                        fail_count += len(anomalies)
+                else:
+                    report_item = {
+                        "股票代码": symbol,
+                        "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "异常类型": "财务数据缺失",
+                        "异常日期": "",
+                        "异常内容": "JSON文件缺少finance字段或财务数据为空",
+                        "状态": "异常"
+                    }
+                    report_data.append(report_item)
+                    fail_count += 1
+                    all_valid = False
+
+            # ------------------- 校验资金流向数据 -------------------
+            if validate_type in ['all', 'money_flow']:
+                if 'money_flow' in data and data['money_flow']:
+                    valid, anomalies = validate_moneyflow_data(data['money_flow'])
+                    if not valid:
+                        all_valid = False
+                        for anomaly in anomalies:
+                            report_item = {
+                                "股票代码": symbol,
+                                "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "异常类型": anomaly["异常类型"],
+                                "异常日期": anomaly.get("异常日期", ""),
+                                "异常内容": anomaly["异常内容"],
+                                "状态": "异常"
+                            }
+                            report_data.append(report_item)
+                        fail_count += len(anomalies)
+                else:
+                    report_item = {
+                        "股票代码": symbol,
+                        "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "异常类型": "资金流向数据缺失",
+                        "异常日期": "",
+                        "异常内容": "JSON文件缺少money_flow字段或资金流向数据为空",
+                        "状态": "异常"
+                    }
+                    report_data.append(report_item)
+                    fail_count += 1
+                    all_valid = False
+
+            # 全部校验通过
+            if all_valid:
+                report_item = {
+                    "股票代码": symbol,
+                    "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "异常类型": "无异常",
+                    "异常日期": "",
+                    "异常内容": f"{validate_type}类型数据质量校验通过",
+                    "状态": "成功"
+                }
+                report_data.append(report_item)
+                success_count += 1
+
+        except Exception as e:
+            report_item = {
+                '股票代码': symbol,
+                '校验时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                '异常类型': '校验失败',
+                '异常日期': '',
+                '异常内容': f'校验过程出错：{str(e)}',
+                '状态': '失败'
+            }
+            report_data.append(report_item)
+            fail_count += 1
+            if debug:
+                import traceback
+                traceback.print_exc()
+
+    # 写入质量报告
+    write_quality_report(report_data)
+
+    return report_data, success_count, fail_count
+
 
 class DataSaver:
     """
     统一数据保存工具类，支持JSON/CSV/Excel三种格式，全量覆盖/增量追加两种模式
     自动处理单位转换、空值兼容、数据去重，完全兼容现有数据格式
     """
+
+    @staticmethod
+    def export_stock_json(symbols: list[str]) -> tuple[int, int, list[str]]:
+        """导出单只/多只股票全量数据为JSON，每个股票一个单独文件保存在data目录
+        :param symbols: 股票代码列表
+        :return: 成功数量，失败数量，成功导出的文件路径列表
+        """
+        import json
+
+        from .finance import FinanceFetcher
+        from .money_flow import MoneyFlowFetcher
+        from .quote import QuoteFetcher
+
+        quote_fetcher = QuoteFetcher()
+        finance_fetcher = FinanceFetcher()
+        money_fetcher = MoneyFlowFetcher()
+        success_count = 0
+        failed_count = 0
+        exported_files = []
+
+        for code in symbols:
+            try:
+                # 拉取全量数据
+                data = {}
+                # 1. 实时行情
+                quote_data = quote_fetcher.get_single_quote(code)
+                data['quote'] = quote_data
+                # 2. 财务报表
+                finance_df = finance_fetcher.get_finance_report(code)
+                data['finance'] = finance_df.to_dict(orient='records')
+                # 3. 资金流向
+                money_df = money_fetcher.get_stock_money_flow(code)
+                data['money_flow'] = money_df.to_dict(orient='records')
+
+                # 保存JSON到data根目录
+                file_path = os.path.join("./data/", f"{code}.json")
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                exported_files.append(file_path)
+                success_count += 1
+            except Exception:
+                failed_count += 1
+                continue
+
+        return success_count, failed_count, exported_files
 
     @staticmethod
     def _convert_unit(data: Union[Dict, List[Dict]]) -> Union[Dict, List[Dict]]:
@@ -103,12 +439,19 @@ class DataSaver:
         # 单位转换
         data = DataSaver._convert_unit(data)
 
-        # 读取现有文件内容
-        if os.path.exists(file_path) and mode == "append":
-            with open(file_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
-        else:
-            existing_data = {}
+        # 读取现有文件内容（无论cover还是append模式，只要文件存在就先读取全部内容）
+        existing_data = {}
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+                # 确保读取到的是字典类型，如果不是则重置为空字典
+                if not isinstance(existing_data, dict):
+                    existing_data = {}
+            except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+                # JSON文件损坏/格式错误/编码错误时，直接使用空字典，避免保存失败
+                print(f"警告：文件{file_path}格式损坏，将覆盖原有内容")
+                existing_data = {}
 
         # 全量覆盖模式直接替换字段
         if mode == "cover":
@@ -216,8 +559,13 @@ class DataSaver:
 
         try:
             if format.lower() == "json":
-                with open(file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    return data
+                except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+                    print(f"警告：文件{file_path}格式损坏，读取失败")
+                    return None
             elif format.lower() == "csv":
                 return pd.read_csv(file_path, encoding="utf_8_sig")
             elif format.lower() == "excel":

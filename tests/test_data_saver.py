@@ -6,7 +6,7 @@ import os
 
 import pandas as pd
 
-from src.stock_download.utils import DataSaver
+from stock_download.utils import DataSaver
 
 # 测试用临时文件路径
 TEST_JSON_PATH = "./data/test_SZ000001.json"

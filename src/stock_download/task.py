@@ -176,10 +176,15 @@ def fill_history_kline(days: int = DATA_SCOPE["default_kline_days"]):
         existing_days = 0
         if os.path.exists(json_path):
             import json
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if 'history_kline' in data:
-                    existing_days = len(data['history_kline'])
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, dict) and 'history_kline' in data:
+                        existing_days = len(data['history_kline'])
+            except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+                # JSON文件损坏时，认为没有历史数据，重新补全
+                print(f"警告：股票{code}的JSON文件损坏，将重新补全历史数据")
+                existing_days = 0
 
         # 如果已有数据足够，跳过
         if existing_days >= days:
@@ -217,3 +222,77 @@ def start_schedule():
     while True:
         schedule.run_pending()
         time.sleep(60)
+
+# ------------------- 股票筛选任务 -------------------
+def filter_stocks():
+    """筛选沪深主板非ST、市值50-300亿的股票，保存到股票列表.csv
+    :return: 筛选后的股票列表，失败抛出异常
+    """
+    import os
+
+    import pandas as pd
+    import requests
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    cookie = os.getenv("XUEQIU_COOKIE")
+    headers = {
+        "Cookie": cookie,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://xueqiu.com/hq/screener",
+        "X-Requested-With": "XMLHttpRequest"
+    }
+
+    all_stocks = []
+    page = 1
+    size = 200
+
+    # 分页拉取所有沪深A股
+    while True:
+        url = f"https://stock.xueqiu.com/v5/stock/screener/quote/list.json?page={page}&size={size}&order=desc&orderby=market_capital&market=CN&type=sh_sz&_=1712990000000"
+        try:
+            resp = requests.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            stock_list = data.get('data', {}).get('list', [])
+            if not stock_list:
+                break
+            all_stocks.extend(stock_list)
+            if len(stock_list) < size:
+                break
+            page += 1
+        except Exception as e:
+            raise RuntimeError(f"拉取第{page}页失败：{str(e)}")
+
+    # 筛选条件
+    filtered = []
+    for stock in all_stocks:
+        symbol = stock['symbol']
+        name = stock['name']
+        # 1. 排除ST/*ST股票
+        if 'ST' in name or '*ST' in name:
+            continue
+        # 2. 保留上证主板(SH60开头)、深证主板(SZ00开头)、创业板(SZ30开头)，排除科创板、北交所
+        if not (symbol.startswith('SH60') or symbol.startswith('SZ00') or symbol.startswith('SZ30')):
+            continue
+        # 3. 总市值在50-300亿之间（接口返回单位为元，转成亿）
+        market_cap = stock.get('market_capital', 0) / 100000000
+        if not (50 <= market_cap <= 300):
+            continue
+        # 格式化写入格式
+        code = symbol[2:]  # 去掉前缀，比如SZ000422 -> 000422
+        filtered.append({
+            'code': code,
+            'name': name,
+            'full_code': symbol
+        })
+
+    if len(filtered) == 0:
+        raise RuntimeError("没有找到符合条件的股票")
+
+    # 写入股票列表.csv
+    df = pd.DataFrame(filtered)
+    output_path = './data/股票列表.csv'
+    df.to_csv(output_path, index=False, encoding='utf-8-sig')
+
+    return filtered, output_path
