@@ -1,2 +1,0 @@
-[console_scripts]
-stock-download = stock_download.cli:main

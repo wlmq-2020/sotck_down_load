@@ -1,7 +1,0 @@
-pysnowball>=0.1.8
-pandas>=2.2.0
-click>=8.1.0
-python-dotenv>=1.0.0
-openpyxl>=3.1.0
-tenacity>=8.2.0
-ratelimit>=2.2.1
