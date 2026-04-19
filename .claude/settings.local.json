@@ -23,7 +23,18 @@
       "Bash(git push *)",
       "Bash(git:*)",
       "Bash(clip)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Skill(ralph-wiggum:ralph-loop)",
+      "Bash(python:*)",
+      "Bash(grep -E \".py$|temp|test\")",
+      "Bash(chcp 65001)",
+      "Bash(mkdir -p data/quote data/finance data/money_flow data/index_fund data/deep_data)",
+      "Bash(touch data/.gitkeep data/quote/.gitkeep data/finance/.gitkeep data/money_flow/.gitkeep data/index_fund/.gitkeep data/deep_data/.gitkeep)",
+      "Bash(touch temp/.gitkeep)",
+      "Bash(mv test_single_download.py tests/test_single_download.py)",
+      "Bash(rm -f example.txt)",
+      "Bash(find data:*)",
+      "Bash(rm -f data/示例_股票列表.csv)"
     ]
   }
 }
