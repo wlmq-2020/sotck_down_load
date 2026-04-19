@@ -11,7 +11,7 @@ authors = [
 description = "基于pysnowball的A股数据获取工具"
 requires-python = ">=3.10"
 dependencies = [
-  "pysnowball>=0.1.8",
+  "pysnowball>=1.2.9",
   "pandas>=2.2.0",
   "click>=8.1.0",
   "python-dotenv>=1.0.0",

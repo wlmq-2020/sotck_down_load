@@ -64,17 +64,3 @@ class DeepDataFetcher:
             "指标": "流通市值(亿)",
             "数值": quote_data["流通市值(亿)"]
         }])
-
-    def save_deep_data(self, data, output_path: str):
-        """保存深度资料数据到文件"""
-        if isinstance(data, dict):
-            data = pd.DataFrame([data])
-
-        if output_path.endswith(".csv"):
-            data.to_csv(output_path, index=False, encoding="utf_8_sig")
-        elif output_path.endswith(".xlsx"):
-            data.to_excel(output_path, index=False)
-        elif output_path.endswith(".json"):
-            data.to_json(output_path, orient="records", force_ascii=False)
-        else:
-            raise ValueError("不支持的文件格式，仅支持.csv/.xlsx/.json")

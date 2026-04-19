@@ -2,25 +2,29 @@
 # -*- coding: utf-8 -*-
 """分层爬取任务封装"""
 import os
-import pandas as pd
-from tqdm import tqdm
 from datetime import datetime
+
+import pandas as pd
 import pysnowball as xq
+from tqdm import tqdm
+
 from .client import XueqiuClient
-from .quote import QuoteFetcher
+from .config import DATA_SCOPE, DEFAULT_STOCKS, PATH, SCHEDULE
 from .finance import FinanceFetcher
 from .money_flow import MoneyFlowFetcher
+from .quote import QuoteFetcher
+from .utils import DataSaver
+
 # 初始化客户端
 client = XueqiuClient()
 quote_fetcher = QuoteFetcher()
 finance_fetcher = FinanceFetcher()
 money_fetcher = MoneyFlowFetcher()
 # 加载股票列表
-STOCK_LIST_PATH = './data/股票列表.csv'
+STOCK_LIST_PATH = PATH["stock_list_path"]
 if not os.path.exists(STOCK_LIST_PATH):
     # 如果没有股票列表，默认给个示例，用户可以自己替换成全量
-    sample_stocks = ['SZ000001', 'SH600000', 'SH601318', 'SZ002594', 'SH600519']
-    stock_list = sample_stocks
+    stock_list = DEFAULT_STOCKS
 else:
     df = pd.read_csv(STOCK_LIST_PATH)
     stock_list = df['full_code'].tolist()
@@ -33,74 +37,35 @@ def get_week_str():
 def get_month_str():
     """获取本月日期字符串"""
     return datetime.now().strftime('%Y%m')
-def update_stock_json(code, field_name, data):
+def update_stock_json(code, field_name, data, append=False, unique_key="交易日期"):
     """更新指定股票的JSON文件，增量更新字段，直接保存在data根目录
     :param code: 股票代码，比如SZ000422
     :param field_name: 要更新的字段名，比如quote/money_flow/finance
     :param data: 要更新的数据
+    :param append: 是否追加模式，用于历史数据补全，避免重复
+    :param unique_key: 唯一键，用于去重，默认是交易日期
     """
-    import json
     json_path = os.path.join("./data/", f"{code}.json")
-    # 读取已有JSON，不存在就新建
-    if os.path.exists(json_path):
-        with open(json_path, 'r', encoding='utf-8') as f:
-            stock_data = json.load(f)
-    else:
-        stock_data = {"股票代码": code}
-    # 更新字段
-    if isinstance(data, pd.DataFrame):
-        stock_data[field_name] = data.to_dict(orient='records')
-    else:
-        stock_data[field_name] = data
-    # 重新计算启动信号（如果所有必要字段都有）
-    if 'quote' in stock_data and 'finance' in stock_data and 'money_flow' in stock_data:
-        try:
-            signal = {}
-            quote = stock_data['quote']
-            finance = stock_data['finance']
-            money_flow = stock_data['money_flow']
-            # 量价信号
-            signal['当日量比'] = round(quote['成交量(手)'] / (quote.get('5日均量', quote['成交量(手)'])), 2)
-            signal['近5日涨跌幅(%)'] = quote.get('近5日涨跌幅', 0)
-            signal['近20日涨跌幅(%)'] = quote.get('近20日涨跌幅', 0)
-            signal['当日振幅(%)'] = quote['振幅(%)']
-            # 资金信号
-            total_flow = sum([item['资金流向(万元)'] for item in money_flow if item['时间'] != '今日汇总'])
-            signal['当日主力资金净流入(万元)'] = round(total_flow, 2)
-            # 基本面信号
-            if len(finance) > 0:
-                latest_finance = finance[0]
-                signal['最新季度净利润同比(%)'] = latest_finance['净利润同比(%)']
-                signal['动态市盈率(TTM)'] = quote.get('市盈率(TTM)', 0)
-            # 计算启动分
-            score = 0
-            if signal['当日量比'] > 1.5: score += 2
-            if signal['当日主力资金净流入(万元)'] > 2000: score += 2
-            if signal.get('最新季度净利润同比(%)', 0) > 20: score += 2
-            if signal['近5日涨跌幅(%)'] > 5 and signal['近5日涨跌幅(%)'] < 20: score += 2
-            if signal.get('动态市盈率(TTM)', 0) > 0 and signal.get('动态市盈率(TTM)', 0) < 30: score += 1
-            if quote['换手率(%)'] > 3 and quote['换手率(%)'] < 15: score +=1
-            signal['启动概率分(0-10)'] = min(score, 10)
-            stock_data['start_signal'] = signal
-        except:
-            pass
-    # 保存更新后的JSON
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(stock_data, f, ensure_ascii=False, indent=2)
+    mode = "append" if append else "cover"
 
-def batch_fetch(func, desc="批量拉取", json_field=None):
+    # 使用统一DataSaver保存数据
+    DataSaver.save(data, json_path, format="json", mode=mode, field_name=field_name, unique_key=unique_key)
+
+def batch_fetch(func, desc="批量拉取", json_field=None, append=False, unique_key="交易日期"):
     """通用批量拉取函数，仅更新JSON，无其他多余文件
     :param func: 单只股票拉取函数
     :param desc: 进度条描述
     :param json_field: 要更新到JSON的字段名，必传
+    :param append: 是否增量追加模式，默认覆盖
+    :param unique_key: 增量模式下的去重唯一键
     """
     failed = []
     for code in tqdm(stock_list, desc=desc):
         try:
             data = func(code)
             # 更新JSON
-            update_stock_json(code, json_field, data)
-        except Exception as e:
+            update_stock_json(code, json_field, data, append=append, unique_key=unique_key)
+        except Exception:
             failed.append(code)
             continue
     # 失败提示
@@ -117,10 +82,16 @@ def daily_task():
     batch_fetch(quote_fetcher.get_single_quote,
                 desc="更新当日行情",
                 json_field='quote')
-    # 2. 当日日线K线
-    batch_fetch(lambda code: pd.DataFrame(xq.kline(code, 'day', 1)['data']['item']),
+    # 2. 当日日线K线（统一格式，中文字段）
+    batch_fetch(lambda code: quote_fetcher.get_history_kline(code, days=1),
                 desc="更新当日K线",
                 json_field='daily_kline')
+    # 3. 增量更新历史K线（补全最近30天缺失的数据，增量追加）
+    batch_fetch(lambda code: quote_fetcher.get_history_kline(code, days=DATA_SCOPE["daily_increment_kline_days"]),
+                desc="增量更新历史K线",
+                json_field='history_kline',
+                append=True,
+                unique_key="交易日期")
     # 3. 当日资金流向
     batch_fetch(money_fetcher.get_stock_money_flow,
                 desc="更新当日资金流向",
@@ -156,9 +127,15 @@ def weekly_task():
                 desc="更新机构持仓数据",
                 json_field='org_holding')
     # 4. 周K线更新
-    batch_fetch(lambda code: pd.DataFrame(xq.kline(code, 'week', 1)['data']['item']),
+    batch_fetch(lambda code: quote_fetcher.get_history_kline(code, days=7),
                 desc="更新周K线",
                 json_field='weekly_kline')
+    # 5. 全量补全历史K线（补全近5年所有缺失数据，每周执行一次）
+    batch_fetch(lambda code: quote_fetcher.get_history_kline(code, days=DATA_SCOPE["weekly_full_kline_days"]),
+                desc="全量补全历史K线",
+                json_field='history_kline',
+                append=True,
+                unique_key="交易日期")
     print(f"===== 第{week}周周级任务执行完成 =====")
 # ------------------- 月级任务 -------------------
 def monthly_task():
@@ -186,19 +163,55 @@ def monthly_task():
                 desc="更新股本变动数据",
                 json_field='shares_change')
     print(f"===== {month}月级任务执行完成 =====")
+# ------------------- 历史数据补全 -------------------
+def fill_history_kline(days: int = DATA_SCOPE["default_kline_days"]):
+    """补全股票历史日K数据，默认补全5年
+    :param days: 补全的天数，默认1825天≈5年
+    """
+    print(f"===== 开始补全{len(stock_list)}只股票的{days}天历史K线数据 =====")
+
+    def fetch_and_fill(code):
+        # 先检查是否已有历史数据
+        json_path = os.path.join("./data/", f"{code}.json")
+        existing_days = 0
+        if os.path.exists(json_path):
+            import json
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if 'history_kline' in data:
+                    existing_days = len(data['history_kline'])
+
+        # 如果已有数据足够，跳过
+        if existing_days >= days:
+            print(f"股票{code}已有{existing_days}天历史数据，跳过")
+            return pd.DataFrame()
+
+        # 计算需要补全的天数
+        need_days = days - existing_days
+        print(f"股票{code}需要补全{need_days}天历史数据")
+        df = quote_fetcher.get_history_kline(code, need_days)
+
+        # 增量更新到JSON
+        update_stock_json(code, 'history_kline', df, append=True, unique_key='交易日期')
+        return df
+
+    batch_fetch(fetch_and_fill, desc="补全历史K线数据", json_field=None)
+    print("===== 历史K线数据补全完成 =====")
+
 # ------------------- 调度服务 -------------------
 def start_schedule():
     """启动定时调度服务"""
-    import schedule
     import time
+
+    import schedule
     # 配置任务
-    schedule.every().day.at("17:00").do(daily_task)
-    schedule.every().sunday.at("02:00").do(weekly_task)
-    schedule.every().month.at("03:00").do(monthly_task)
+    schedule.every().day.at(SCHEDULE["daily_time"]).do(daily_task)
+    schedule.every().sunday.at(SCHEDULE["weekly_time"]).do(weekly_task)
+    schedule.every().month.at(SCHEDULE["monthly_time"]).do(monthly_task)
     print("===== 定时调度服务已启动 =====")
-    print("每日17:00执行日级任务")
-    print("每周日02:00执行周级任务")
-    print("每月1号03:00执行月级任务")
+    print(f"每日{SCHEDULE['daily_time']}执行日级任务")
+    print(f"每周日{SCHEDULE['weekly_time']}执行周级任务")
+    print(f"每月1号{SCHEDULE['monthly_time']}执行月级任务")
     print("按Ctrl+C停止服务")
     # 保持运行
     while True:
