@@ -341,6 +341,21 @@ def preview_cmd(ctx, symbol, type, days):
             import traceback
             traceback.print_exc()
 
+# --------------- 自选股一键更新命令 ---------------
+@main.command(name="quote-update", help="一键更新所有自选股票的全量数据，不需要任何参数\n自动读取 ./data/自选股票列表.csv 中的股票，更新实时行情、历史K线、财务数据、资金流向")
+@click.pass_context
+def custom_update_cmd(ctx):
+    from stock_download.task import update_custom_stocks
+    try:
+        update_custom_stocks()
+    except Exception as e:
+        click.echo(f"自选股更新失败：{str(e)}", err=True)
+        if ctx.obj['DEBUG']:
+            import traceback
+            traceback.print_exc()
+
+# --------------- 自选股历史K线增量补全命令 ---------------
+
 # --------------- 数据质量校验命令 ---------------
 @main.command(name="validate-data", help="校验已下载的股票数据质量，生成数据质量报告\n默认校验所有股票所有类型数据，也可指定股票或校验类型")
 @click.argument("symbols", nargs=-1, required=False)

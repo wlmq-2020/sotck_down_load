@@ -46,7 +46,7 @@ logs/
 temp/
 *.tmp
 *.log
-
+*.json
 # 操作系统文件
 .DS_Store
 Thumbs.db

@@ -28,6 +28,15 @@ if not os.path.exists(STOCK_LIST_PATH):
 else:
     df = pd.read_csv(STOCK_LIST_PATH)
     stock_list = df['full_code'].tolist()
+
+# 加载自选股票列表
+CUSTOM_STOCK_LIST_PATH = "./data/自选股票列表.csv"
+custom_stock_list = []
+if os.path.exists(CUSTOM_STOCK_LIST_PATH):
+    df_custom = pd.read_csv(CUSTOM_STOCK_LIST_PATH)
+    custom_stock_list = df_custom['full_code'].tolist()
+    # 合并到总股票列表，去重
+    stock_list = list(set(stock_list + custom_stock_list))
 def get_today_str():
     """获取今日日期字符串"""
     return datetime.now().strftime('%Y%m%d')
@@ -37,15 +46,21 @@ def get_week_str():
 def get_month_str():
     """获取本月日期字符串"""
     return datetime.now().strftime('%Y%m')
-def update_stock_json(code, field_name, data, append=False, unique_key="交易日期"):
-    """更新指定股票的JSON文件，增量更新字段，直接保存在data根目录
+def update_stock_json(code, field_name, data, append=False, unique_key="交易日期", save_to_quote_dir=True):
+    """更新指定股票的JSON文件，增量更新字段
     :param code: 股票代码，比如SZ000422
     :param field_name: 要更新的字段名，比如quote/money_flow/finance
     :param data: 要更新的数据
     :param append: 是否追加模式，用于历史数据补全，避免重复
     :param unique_key: 唯一键，用于去重，默认是交易日期
+    :param save_to_quote_dir: 是否保存到quote目录，默认是，和K线数据放在一起
     """
-    json_path = os.path.join("./data/", f"{code}.json")
+    if save_to_quote_dir:
+        json_dir = "./data/quote/"
+        os.makedirs(json_dir, exist_ok=True)
+        json_path = os.path.join(json_dir, f"{code}.json")
+    else:
+        json_path = os.path.join("./data/", f"{code}.json")
     mode = "append" if append else "cover"
 
     # 使用统一DataSaver保存数据
@@ -296,3 +311,38 @@ def filter_stocks():
     df.to_csv(output_path, index=False, encoding='utf-8-sig')
 
     return filtered, output_path
+
+def update_custom_stocks():
+    """一键更新所有自选股票的全量数据，不需要任何参数
+    自动实现所有更新逻辑：实时行情、最近5年历史K线（智能增量）、财务报表、今日资金流向
+    所有数据自动按唯一键去重，不会重复下载已有数据
+    """
+    if not custom_stock_list:
+        print("错误：未找到自选股票列表，请先在 ./data/自选股票列表.csv 中添加股票")
+        return
+
+    print(f"找到 {len(custom_stock_list)} 只自选股票，开始全量更新...")
+
+    for code in tqdm(custom_stock_list, desc="更新自选股数据"):
+        try:
+            # 1. 更新实时行情
+            quote_data = quote_fetcher.get_single_quote(code)
+            update_stock_json(code, "quote", quote_data, append=False, save_to_quote_dir=True)
+
+            # 2. 智能增量更新最近5年历史K线，自动去重，不会重复下载已有交易日数据
+            df_kline = quote_fetcher.get_history_kline(code, days=DATA_SCOPE["default_kline_days"])
+            update_stock_json(code, "history_kline", df_kline.to_dict(orient='records'), append=True, unique_key="交易日期", save_to_quote_dir=True)
+
+            # 3. 更新财务报表
+            df_finance = finance_fetcher.get_finance_report(code, report_type="all")
+            update_stock_json(code, "finance", df_finance.to_dict(orient='records'), append=False, save_to_quote_dir=True)
+
+            # 4. 更新今日资金流向
+            df_money = money_fetcher.get_stock_money_flow(code)
+            update_stock_json(code, "money_flow", df_money.to_dict(orient='records'), append=True, unique_key="时间", save_to_quote_dir=True)
+
+        except Exception as e:
+            print(f"警告：更新 {code} 失败：{str(e)}")
+            continue
+
+    print(f"\n✅ 所有自选股票全量更新完成！数据统一保存在 ./data/quote/ 目录下，每个股票对应一个JSON文件")
