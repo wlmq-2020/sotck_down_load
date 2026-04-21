@@ -112,6 +112,25 @@ stock-download deep 000001.SZ --announcement --count 20 --output ./data/announce
 stock-download deep 000001.SZ --margin
 ```
 
+### 6. 定时自动更新
+项目提供了开箱即用的Linux定时更新脚本，无需手动执行更新：
+```bash
+# 1. 进入cron目录
+cd cron
+# 2. 修改update_daily.sh中的配置，指定你的Python路径和项目部署路径
+# 3. 加入定时任务，每天15:30收盘后自动执行
+crontab -e
+# 添加以下内容：
+30 15 * * * /opt/stock_down_load/cron/update_daily.sh
+```
+
+脚本自动执行逻辑：
+- ✅ 每日更新自选股和所有股票日级数据（行情、资金流、日K线等）
+- ✅ 每周日自动执行周级数据更新（财务、公告、机构持仓等）
+- ✅ 每月1号自动执行月级数据更新（公司信息、行业分类等）
+- ✅ 自动数据质量校验和问题修复
+- ✅ 每日生成独立日志文件，方便排查问题
+
 ## 目录结构说明
 ```
 ├── src/
@@ -130,6 +149,7 @@ stock-download deep 000001.SZ --margin
 │   ├── money_flow/              # 资金流向数据
 │   ├── index_fund/              # 指数基金数据
 │   └── deep_data/               # 深度资料数据
+├── cron/                        # Linux定时调度脚本目录
 ├── temp/                        # 临时调试脚本目录（不上传Git）
 ├── tests/                       # 测试用例
 ├── .env.example                 # 环境变量模板

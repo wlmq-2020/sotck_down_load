@@ -53,3 +53,7 @@ Thumbs.db
 
 # Claude 本地配置
 .claude/
+
+# Cron定时任务产生的文件
+cron/*.log
+cron/*.lock

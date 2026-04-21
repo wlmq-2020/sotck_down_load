@@ -42,6 +42,7 @@
 │   ├── money_flow/              # 资金流向数据
 │   ├── index_fund/              # 指数基金数据
 │   └── deep_data/               # 深度资料数据
+├── cron/                        # Linux定时调度脚本目录（允许提交）
 ├── temp/                        # 临时调试脚本目录（禁止提交到Git）
 ├── tests/                       # 测试用例目录
 ├── .env.example                 # 环境变量模板
@@ -58,6 +59,7 @@
 ✅ **允许操作**：
 - 在现有模块文件中修改、新增功能
 - 允许src/stock_download/下存在task.py和utils.py模块
+- 在cron目录下存放定时调度脚本
 - 在temp目录下存放临时调试脚本
 - 在tests目录下新增测试用例
 - 在data目录下按功能分类存放下载的数据文件
