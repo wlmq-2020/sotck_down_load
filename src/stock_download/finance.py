@@ -27,6 +27,7 @@ class FinanceFetcher:
         all_reports = {}
 
         # 获取利润表
+        # 数据来源：雪球接口原始值，无任何修改
         if report_type in ["income", "all"]:
             raw_data = self.client.get_income(symbol)
             if not raw_data or "data" not in raw_data:
@@ -43,17 +44,18 @@ class FinanceFetcher:
                 op = item.get("op")
 
                 all_reports[report_period].update({
-                    "营业收入(万元)": round(total_revenue[0] / 10000, 2) if total_revenue and total_revenue[0] else None,
-                    "营业收入同比(%)": round(total_revenue[1] * 100, 2) if total_revenue and total_revenue[1] else None,
-                    "净利润(万元)": round(net_profit[0] / 10000, 2) if net_profit and net_profit[0] else None,
-                    "净利润同比(%)": round(net_profit[1] * 100, 2) if net_profit and net_profit[1] else None,
-                    "扣非净利润(万元)": round(net_profit_atsopc[0] / 10000, 2) if net_profit_atsopc and net_profit_atsopc[0] else None,
-                    "扣非净利润同比(%)": round(net_profit_atsopc[1] * 100, 2) if net_profit_atsopc and net_profit_atsopc[1] else None,
-                    "营业利润(万元)": round(op[0] / 10000, 2) if op and op[0] else None,
-                    "营业利润同比(%)": round(op[1] * 100, 2) if op and op[1] else None
+                    "营业收入": total_revenue[0] if total_revenue and len(total_revenue) > 0 else None,
+                    "营业收入同比": total_revenue[1] if total_revenue and len(total_revenue) > 1 else None,
+                    "净利润": net_profit[0] if net_profit and len(net_profit) > 0 else None,
+                    "净利润同比": net_profit[1] if net_profit and len(net_profit) > 1 else None,
+                    "扣非净利润": net_profit_atsopc[0] if net_profit_atsopc and len(net_profit_atsopc) > 0 else None,
+                    "扣非净利润同比": net_profit_atsopc[1] if net_profit_atsopc and len(net_profit_atsopc) > 1 else None,
+                    "营业利润": op[0] if op and len(op) > 0 else None,
+                    "营业利润同比": op[1] if op and len(op) > 1 else None
                 })
 
         # 获取资产负债表
+        # 数据来源：雪球接口原始值，无任何修改
         if report_type in ["balance", "all"]:
             raw_data = self.client.get_balance(symbol)
             if not raw_data or "data" not in raw_data:
@@ -72,18 +74,19 @@ class FinanceFetcher:
                 inventory = item.get("inventory")
 
                 all_reports[report_period].update({
-                    "总资产(万元)": round(total_assets[0] / 10000, 2) if total_assets and total_assets[0] else None,
-                    "总资产同比(%)": round(total_assets[1] * 100, 2) if total_assets and total_assets[1] else None,
-                    "总负债(万元)": round(total_liability[0] / 10000, 2) if total_liability and total_liability[0] else None,
-                    "总负债同比(%)": round(total_liability[1] * 100, 2) if total_liability and total_liability[1] else None,
-                    "净资产(万元)": round(total_equity[0] / 10000, 2) if total_equity and total_equity[0] else None,
-                    "净资产同比(%)": round(total_equity[1] * 100, 2) if total_equity and total_equity[1] else None,
-                    "货币资金(万元)": round(cash[0] / 10000, 2) if cash and cash[0] else None,
-                    "应收账款(万元)": round(account_receivable[0] / 10000, 2) if account_receivable and account_receivable[0] else None,
-                    "存货(万元)": round(inventory[0] / 10000, 2) if inventory and inventory[0] else None
+                    "总资产": total_assets[0] if total_assets and len(total_assets) > 0 else None,
+                    "总资产同比": total_assets[1] if total_assets and len(total_assets) > 1 else None,
+                    "总负债": total_liability[0] if total_liability and len(total_liability) > 0 else None,
+                    "总负债同比": total_liability[1] if total_liability and len(total_liability) > 1 else None,
+                    "净资产": total_equity[0] if total_equity and len(total_equity) > 0 else None,
+                    "净资产同比": total_equity[1] if total_equity and len(total_equity) > 1 else None,
+                    "货币资金": cash[0] if cash and len(cash) > 0 else None,
+                    "应收账款": account_receivable[0] if account_receivable and len(account_receivable) > 0 else None,
+                    "存货": inventory[0] if inventory and len(inventory) > 0 else None
                 })
 
         # 获取现金流量表
+        # 数据来源：雪球接口原始值，无任何修改
         if report_type in ["cash", "all"]:
             raw_data = self.client.get_cash_flow(symbol)
             if not raw_data or "data" not in raw_data:
@@ -100,11 +103,11 @@ class FinanceFetcher:
                 cash_increase = item.get("cash_increase")
 
                 all_reports[report_period].update({
-                    "经营活动现金流(万元)": round(net_operate_cash_flow[0] / 10000, 2) if net_operate_cash_flow and net_operate_cash_flow[0] else None,
-                    "经营活动现金流同比(%)": round(net_operate_cash_flow[1] * 100, 2) if net_operate_cash_flow and net_operate_cash_flow[1] else None,
-                    "投资活动现金流(万元)": round(net_invest_cash_flow[0] / 10000, 2) if net_invest_cash_flow and net_invest_cash_flow[0] else None,
-                    "筹资活动现金流(万元)": round(net_finance_cash_flow[0] / 10000, 2) if net_finance_cash_flow and net_finance_cash_flow[0] else None,
-                    "现金净增加额(万元)": round(cash_increase[0] / 10000, 2) if cash_increase and cash_increase[0] else None
+                    "经营活动现金流": net_operate_cash_flow[0] if net_operate_cash_flow and len(net_operate_cash_flow) > 0 else None,
+                    "经营活动现金流同比": net_operate_cash_flow[1] if net_operate_cash_flow and len(net_operate_cash_flow) > 1 else None,
+                    "投资活动现金流": net_invest_cash_flow[0] if net_invest_cash_flow and len(net_invest_cash_flow) > 0 else None,
+                    "筹资活动现金流": net_finance_cash_flow[0] if net_finance_cash_flow and len(net_finance_cash_flow) > 0 else None,
+                    "现金净增加额": cash_increase[0] if cash_increase and len(cash_increase) > 0 else None
                 })
 
         # 转换为DataFrame

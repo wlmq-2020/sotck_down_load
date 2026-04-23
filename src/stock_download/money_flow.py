@@ -30,30 +30,28 @@ class MoneyFlowFetcher:
 
         items = raw_data["data"]["items"]
         result = []
-        total_inflow = 0
-        total_outflow = 0
+        prev_amount = 0  # 上一分钟的累计值
 
         for item in items:
             timestamp = item["timestamp"]
             # 时间戳转成北京时间
             time_str = datetime.fromtimestamp(timestamp/1000).strftime('%Y-%m-%d %H:%M')
-            amount = item["amount"]
+            current_amount = item["amount"]
 
-            # 统计流入流出
-            if amount > 0:
-                total_inflow += amount
-            else:
-                total_outflow += abs(amount)
+            # 差分计算单分钟净流入：当前累计 - 上一分钟累计，保留原始值不转换
+            minute_amount = current_amount - prev_amount
+            prev_amount = current_amount
 
             result.append({
                 "时间": time_str,
-                "资金流向(万元)": round(amount / UNIT_CONVERT["yuan_to_wan"], UNIT_CONVERT["decimal_places"])
+                "资金流向(元)": minute_amount
             })
 
-        # 最后加一行汇总
+        # 最后加一行汇总：最后一分钟的累计值就是当日总净流入，保留原始值
+        total_amount = items[-1]["amount"] if items else 0
         result.append({
             "时间": "今日汇总",
-            "资金流向(万元)": round((total_inflow - total_outflow) / UNIT_CONVERT["yuan_to_wan"], UNIT_CONVERT["decimal_places"])
+            "资金流向(元)": total_amount
         })
 
         # 数据质量校验

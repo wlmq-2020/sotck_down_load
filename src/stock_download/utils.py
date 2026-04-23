@@ -418,36 +418,9 @@ class DataSaver:
     @staticmethod
     def _convert_unit(data: Union[Dict, List[Dict]]) -> Union[Dict, List[Dict]]:
         """
-        内部方法：自动处理数值字段单位转换
-        - 元 → 万元（字段包含"成交额"的自动除以10000）
-        - 小数百分比 → 百分比数值保留2位小数（字段包含"涨跌幅"/"换手率"/"毛利率"/"同比"的自动乘以100保留2位）
+        内部方法：已完全删除单位转换逻辑，直接返回原始数据
+        数据来源：雪球接口原始值，无任何修改
         """
-        if isinstance(data, dict):
-            processed = {}
-            for key, value in data.items():
-                if value is None:
-                    processed[key] = value
-                    continue
-                # 元转万元
-                if key == "成交额" and isinstance(value, (int, float)):
-                    processed["成交额(万)"] = round(value / UNIT_CONVERT["yuan_to_wan"], UNIT_CONVERT["decimal_places"])
-                # 百分比转换，自动添加(%)后缀
-                elif any(k in key for k in ["涨跌幅", "换手率", "毛利率", "同比", "增速"]) and isinstance(value, (int, float)):
-                    new_key = key if key.endswith("(%)") else f"{key}(%)"
-                    if abs(value) < 1:  # 是小数形式的百分比，比如0.065 → 6.5%
-                        processed[new_key] = round(value * UNIT_CONVERT["percent_multiply"], UNIT_CONVERT["decimal_places"])
-                    else:
-                        processed[new_key] = round(value, UNIT_CONVERT["decimal_places"])
-                # 普通数值保留2位小数
-                elif isinstance(value, (int, float)):
-                    processed[key] = round(value, UNIT_CONVERT["decimal_places"]) if value is not None else None
-                else:
-                    processed[key] = value
-            return processed
-
-        elif isinstance(data, list):
-            return [DataSaver._convert_unit(item) for item in data]
-
         return data
 
     @staticmethod
