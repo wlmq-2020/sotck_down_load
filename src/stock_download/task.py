@@ -46,7 +46,7 @@ def get_week_str():
 def get_month_str():
     """获取本月日期字符串"""
     return datetime.now().strftime('%Y%m')
-def update_stock_json(code, field_name, data, append=False, unique_key="交易日期", save_to_quote_dir=True):
+def update_stock_json(code, field_name, data, append=False, unique_key="交易日期", save_to_quote_dir=False):
     """更新指定股票的JSON文件，增量更新字段
     :param code: 股票代码，比如SZ000422
     :param field_name: 要更新的字段名，比如quote/money_flow/finance

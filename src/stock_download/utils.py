@@ -81,12 +81,11 @@ MAX_REQUESTS_PER_MINUTE=30
     return created_dirs, env_template_path if env_created else None
 
 
-def validate_stock_data(symbols: list[str], validate_type: str = "all", auto_fix: bool = False,
+def validate_stock_data(symbols: list[str], validate_type: str = "all",
                        start_date: str = "2021-01-01", end_date: str = None, debug: bool = False) -> tuple[list[dict], int, int]:
-    """校验已下载的股票数据质量
+    """校验已下载的股票数据质量，自动修复缺失的文件和数据
     :param symbols: 股票代码列表
     :param validate_type: 校验数据类型：all/kline/quote/finance/money_flow
-    :param auto_fix: 是否自动修复缺失的K线数据
     :param start_date: K线校验开始日期
     :param end_date: K线校验结束日期，默认今日
     :param debug: 是否开启调试模式
@@ -111,17 +110,48 @@ def validate_stock_data(symbols: list[str], validate_type: str = "all", auto_fix
             # 读取已下载的K线数据
             json_path = f"./data/{symbol}.json"
             if not os.path.exists(json_path):
-                report_item = {
-                    '股票代码': symbol,
-                    '校验时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    '异常类型': '文件不存在',
-                    '异常日期': '',
-                    '异常内容': f'JSON数据文件不存在：{json_path}',
-                    '状态': '失败'
-                }
-                report_data.append(report_item)
-                fail_count += 1
-                continue
+                # 自动修复：拉取全量数据创建文件
+                try:
+                    print(f"[INFO] 文件{json_path}不存在，自动拉取全量数据创建...")
+                    success, _, _ = DataSaver.export_stock_json([symbol])
+                    if success == 1:
+                        # 创建成功，继续后续校验
+                        report_item = {
+                            "股票代码": symbol,
+                            "校验时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "异常类型": "已修复",
+                            "异常日期": "",
+                            "异常内容": f"文件不存在，已自动创建并拉取全量数据",
+                            "状态": "已修复"
+                        }
+                        report_data.append(report_item)
+                        # 重新读取文件
+                        data = DataSaver.load(json_path, format='json')
+                    else:
+                        # 创建失败
+                        report_item = {
+                            '股票代码': symbol,
+                            '校验时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            '异常类型': '文件不存在',
+                            '异常日期': '',
+                            '异常内容': f'JSON数据文件不存在：{json_path}，自动创建失败',
+                            '状态': '失败'
+                        }
+                        report_data.append(report_item)
+                        fail_count += 1
+                        continue
+                except Exception as e:
+                    report_item = {
+                        '股票代码': symbol,
+                        '校验时间': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        '异常类型': '文件不存在',
+                        '异常日期': '',
+                        '异常内容': f'JSON数据文件不存在：{json_path}，自动创建失败：{str(e)}',
+                        '状态': '失败'
+                    }
+                    report_data.append(report_item)
+                    fail_count += 1
+                    continue
 
             # 加载数据
             data = DataSaver.load(json_path, format='json')
@@ -160,7 +190,7 @@ def validate_stock_data(symbols: list[str], validate_type: str = "all", auto_fix
                         fail_count += len(anomalies)
 
                         # K线自动修复
-                        if auto_fix and missing_dates:
+                        if missing_dates:
                             try:
                                 # 计算需要下载的天数：从最早缺失日期到今日
                                 min_missing_date = min(missing_dates)
