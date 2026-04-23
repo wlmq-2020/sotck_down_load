@@ -28,23 +28,23 @@ class QuoteFetcher:
         if "ST" in stock_name or "*ST" in stock_name:
             raise Exception(f"股票{symbol}({stock_name})是ST股票，默认不支持获取，请在配置中单独开启")
 
-        # 格式化返回关键字段
+        # 直接返回接口原始字段，不做任何单位转换或数值修改
         return {
             "股票代码": data.get("symbol"),
             "当前价格": data.get("current"),
-            "涨跌幅(%)": round(data.get("percent", 0), UNIT_CONVERT["decimal_places"]),
+            "涨跌幅(%)": data.get("percent", 0),
             "涨跌额": data.get("chg"),
             "开盘价": data.get("open"),
             "最高价": data.get("high"),
             "最低价": data.get("low"),
             "昨收价": data.get("last_close"),
             "成交量(手)": data.get("volume"),
-            "成交额(万)": round(data.get("amount", 0) / UNIT_CONVERT["yuan_to_wan"], UNIT_CONVERT["decimal_places"]),
-            "换手率(%)": round(data.get("turnover_rate", 0), UNIT_CONVERT["decimal_places"]),
-            "振幅(%)": round(data.get("amplitude", 0), UNIT_CONVERT["decimal_places"]),
-            "年初至今涨跌幅(%)": round(data.get("current_year_percent", 0), UNIT_CONVERT["decimal_places"]),
-            "总市值(亿)": round(data.get("market_capital", 0) / UNIT_CONVERT["yuan_to_yi"], UNIT_CONVERT["decimal_places"]),
-            "流通市值(亿)": round(data.get("float_market_capital", 0) / UNIT_CONVERT["yuan_to_yi"], UNIT_CONVERT["decimal_places"]),
+            "成交额(元)": data.get("amount", 0),
+            "换手率(%)": data.get("turnover_rate", 0),
+            "振幅(%)": data.get("amplitude", 0),
+            "年初至今涨跌幅(%)": data.get("current_year_percent", 0),
+            "总市值(元)": data.get("market_capital", 0),
+            "流通市值(元)": data.get("float_market_capital", 0),
             "平均价格": data.get("avg_price"),
             "更新时间": data.get("timestamp")
         }
@@ -87,21 +87,14 @@ class QuoteFetcher:
 
         df = pd.DataFrame(raw_data["data"]["item"], columns=columns)
 
-        # 数据格式化，单位转换，兼容空值不报错
-        df["交易日期"] = pd.to_datetime(df["时间戳"], unit="ms").dt.strftime("%Y-%m-%d")
-        df["成交额(万)"] = df["成交额(元)"].apply(lambda x: round(x / UNIT_CONVERT["yuan_to_wan"], UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["涨跌幅(%)"] = df["涨跌幅(%)"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["换手率(%)"] = df["换手率(%)"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["市盈率(TTM)"] = df["市盈率(TTM)"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["市净率"] = df["市净率"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["涨速(%)"] = df["涨速(%)"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["5分钟涨跌幅(%)"] = df["5分钟涨跌幅(%)"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
-        df["均价(元)"] = df["均价(元)"].apply(lambda x: round(x, UNIT_CONVERT["decimal_places"]) if x is not None else x)
+        # 仅新增交易日期字段，其他所有数据完全使用接口原始返回值，不做任何修改、转换、round
+        # 雪球K线时间戳为北京时间(UTC+8)午夜，直接转换为UTC会偏移1天，需加8小时修正
+        df["交易日期"] = (pd.to_datetime(df["时间戳"], unit="ms") + pd.Timedelta(hours=8)).dt.strftime("%Y-%m-%d")
 
-        # 保留全部24个原始字段+新增字段，交易日期放最前面
+        # 保留全部原始字段+交易日期，不做任何数值修改
         result_df = df[[
             "交易日期", "开盘价", "最高价", "最低价", "收盘价",
-            "成交量(手)", "成交额(万)", "涨跌幅(%)", "涨跌额", "换手率(%)",
+            "成交量(手)", "成交额(元)", "涨跌幅(%)", "涨跌额", "换手率(%)",
             "量比", "市盈率(TTM)", "市净率", "总市值(元)", "流通市值(元)",
             "涨速(%)", "5分钟涨跌幅(%)", "内盘(手)", "外盘(手)",
             "委买量(手)", "委卖量(手)", "委差(手)", "均价(元)", "昨收价", "时间戳"
