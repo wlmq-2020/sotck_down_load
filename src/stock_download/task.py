@@ -89,6 +89,9 @@ def batch_fetch(func, desc="批量拉取", json_field=None, append=False, unique
     failed = []
     for code in tqdm(stock_list, desc=desc):
         try:
+            # 自选股跳过普通批量更新，仅在自选股更新任务中单独更新到quote目录，避免重复存储
+            if code in custom_stock_list:
+                continue
             data = func(code)
             # 更新JSON
             update_stock_json(code, json_field, data, append=append, unique_key=unique_key)
