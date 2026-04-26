@@ -360,4 +360,4 @@ def update_custom_stocks():
             print(f"警告：更新 {code} 失败：{str(e)}")
             continue
 
-    print(f"\n✅ 所有自选股票全量更新完成！数据统一保存在 ./data/quote/ 目录下，每个股票对应一个JSON文件")
+    print(f"\n[成功] 所有自选股票全量更新完成！数据统一保存在 ./data/quote/ 目录下，每个股票对应一个JSON文件")
