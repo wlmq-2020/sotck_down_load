@@ -70,6 +70,8 @@ PATH: Dict[str, str] = {
     "money_flow_dir": "./data/money_flow/",
     "index_fund_dir": "./data/index_fund/",
     "deep_data_dir": "./data/deep_data/",
+    # 历史K线CSV存储目录
+    "history_dir": "./data/history/",
     # 数据质量报告路径
     "quality_report_path": "./data/index/data_quality_report.csv",
     # 股票列表文件路径
