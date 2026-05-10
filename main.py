@@ -5,16 +5,37 @@
 使用方法：python main.py [命令] [参数]
 """
 import os
+import traceback
 
 import click
+import pandas as pd
 from dotenv import load_dotenv
 
 # 加载环境变量（必须放在最前面）
 load_dotenv()
 # 导入目录检测工具和统一数据保存工具
-from stock_download.utils import DataSaver, check_root_dir_py_files
+from stock_download.finance import FinanceFetcher
+from stock_download.index_fund import IndexFundFetcher
+from stock_download.money_flow import MoneyFlowFetcher
+from stock_download.quote import QuoteFetcher
+from stock_download.task import (
+    daily_task,
+    fill_history_kline,
+    filter_stocks,
+    monthly_task,
+    start_schedule,
+    update_custom_stocks,
+    weekly_task,
+)
+from stock_download.utils import (
+    DataSaver,
+    check_root_dir_py_files,
+    validate_stock_code,
+    validate_stock_data,
+)
 
 VERSION = "1.0.0"
+
 
 @click.group(help="基于pysnowball的A股数据获取工具，所有下载功能统一入口", context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--debug", "-d", is_flag=True, help="开启调试模式，打印详细日志")
@@ -36,14 +57,13 @@ def main(ctx, debug):
     click.warning = lambda msg: click.secho(f"[WARNING] {msg}", fg='yellow')
     click.error = lambda msg: click.secho(f"[ERROR] {msg}", fg='red', err=True)
 
+
 # --------------- 实时行情命令 ---------------
 @main.command(name="quote", help="获取股票实时行情数据\n参数：symbols 股票代码，多个用空格分隔，例如：SZ000001 SH600000")
 @click.argument("symbols", nargs=-1, required=True)
 @click.option("--output", "-o", help="输出文件路径，支持.csv/.xlsx/.json，例如：./data/quote.csv")
 @click.pass_context
 def quote_cmd(ctx, symbols, output):
-    from stock_download.quote import QuoteFetcher
-    from stock_download.utils import validate_stock_code
     try:
         # 校验所有股票代码
         valid_symbols = []
@@ -79,8 +99,8 @@ def quote_cmd(ctx, symbols, output):
     except Exception as e:
         click.error(f"获取行情失败：{str(e)}")
         if ctx.obj['DEBUG']:
-            import traceback
             traceback.print_exc()
+
 
 # --------------- 财务数据命令 ---------------
 @main.command(name="finance", help="获取财务基本面数据\n参数：symbol 股票代码，例如：SZ000001")
@@ -88,7 +108,6 @@ def quote_cmd(ctx, symbols, output):
 @click.option("--report-type", "-t", default="all", help="报表类型：all(全部), income(利润表), balance(资产负债表), cash(现金流量表)")
 @click.option("--output", "-o", help="输出文件路径")
 def finance_cmd(symbol, report_type, output):
-    from stock_download.finance import FinanceFetcher
     try:
         fetcher = FinanceFetcher()
         df = fetcher.get_finance_report(symbol, report_type)
@@ -96,9 +115,10 @@ def finance_cmd(symbol, report_type, output):
         click.echo(df.to_string(index=False))
         if output:
             DataSaver.save(df, output)
-            click.echo(f"\n✅ 数据已保存到：{output}")
+            click.echo(f"\n数据已保存到：{output}")
     except Exception as e:
-        click.echo(f"❌ 获取财务数据失败：{str(e)}", err=True)
+        click.echo(f"获取财务数据失败：{str(e)}", err=True)
+
 
 # --------------- 资金流向命令 ---------------
 @main.command(name="money-flow", help="获取资金流向数据")
@@ -107,7 +127,6 @@ def finance_cmd(symbol, report_type, output):
 @click.option("--date", "-d", help="龙虎榜日期，格式YYYY-MM-DD")
 @click.option("--output", "-o", help="输出文件路径")
 def money_flow_cmd(symbol, lhb, date, output):
-    from stock_download.money_flow import MoneyFlowFetcher
     try:
         fetcher = MoneyFlowFetcher()
         if symbol:
@@ -122,29 +141,29 @@ def money_flow_cmd(symbol, lhb, date, output):
 
             if output:
                 DataSaver.save(df, output)
-                click.echo(f"\n✅ 完整数据已保存到：{output}")
+                click.echo(f"\n完整数据已保存到：{output}")
         elif lhb:
             df = fetcher.get_lhb_data(date)
             click.echo("\n龙虎榜数据：")
             click.echo(df.to_string(index=False))
             if output:
                 DataSaver.save(df, output)
-                click.echo(f"\n✅ 数据已保存到：{output}")
+                click.echo(f"\n数据已保存到：{output}")
         else:
             # 暂时屏蔽北向资金接口，待适配
-            click.echo("ℹ️ 北向资金接口正在适配中，当前支持查询个股资金流向：python main.py money-flow --symbol SZ000001")
+            click.echo("该功能暂未开发，后续版本支持，当前支持查询个股资金流向：python main.py money-flow --symbol SZ000001")
     except Exception as e:
-        click.echo(f"❌ 获取资金流向失败：{str(e)}", err=True)
+        click.echo(f"获取资金流向失败：{str(e)}", err=True)
+
 
 # --------------- 指数基金命令 ---------------
-@main.command(name="index", help="获取指数与基金数据")
+@main.command(name="index", help="获取指数与基金数据 [待开发]行业板块/基金净值/ETF行情")
 @click.option("--major", is_flag=True, help="获取主要大盘指数行情")
-@click.option("--industry", is_flag=True, help="获取行业板块数据")
-@click.option("--fund", "-f", help="基金代码，获取基金净值数据")
-@click.option("--etf", "-e", help="ETF代码，获取ETF实时行情")
+@click.option("--industry", is_flag=True, help="[待开发]获取行业板块数据")
+@click.option("--fund", "-f", help="[待开发]基金代码，获取基金净值数据")
+@click.option("--etf", "-e", help="[待开发]ETF代码，获取ETF实时行情")
 @click.option("--output", "-o", help="输出文件路径")
 def index_cmd(major, industry, fund, etf, output):
-    from stock_download.index_fund import IndexFundFetcher
     try:
         fetcher = IndexFundFetcher()
         if major:
@@ -153,51 +172,52 @@ def index_cmd(major, industry, fund, etf, output):
             click.echo(df.to_string(index=False))
             if output:
                 DataSaver.save(df, output)
-                click.echo(f"\n✅ 数据已保存到：{output}")
+                click.echo(f"\n数据已保存到：{output}")
         elif industry:
-            click.echo("ℹ️ 行业板块接口正在适配中")
+            click.echo("该功能暂未开发，后续版本支持")
         elif fund:
-            click.echo("ℹ️ 基金净值接口正在适配中")
+            click.echo("该功能暂未开发，后续版本支持")
         elif etf:
-            click.echo("ℹ️ ETF行情接口正在适配中")
+            click.echo("该功能暂未开发，后续版本支持")
         else:
             click.echo("请指定查询类型：--major(大盘指数)")
     except Exception as e:
-        click.echo(f"❌ 获取指数基金数据失败：{str(e)}", err=True)
+        click.echo(f"获取指数基金数据失败：{str(e)}", err=True)
+
 
 # --------------- 深度资料命令 ---------------
-@main.command(name="deep", help="获取深度资料数据\n参数：symbol 股票代码")
+@main.command(name="deep", help="获取深度资料数据 [待开发]公司公告/融资融券\n参数：symbol 股票代码")
 @click.argument("symbol", required=True)
-@click.option("--announcement", "-a", is_flag=True, help="获取公司公告")
+@click.option("--announcement", "-a", is_flag=True, help="[待开发]获取公司公告")
 @click.option("--count", "-c", default=10, help="公告数量，默认10条")
-@click.option("--margin", "-m", is_flag=True, help="获取融资融券数据")
+@click.option("--margin", "-m", is_flag=True, help="[待开发]获取融资融券数据")
 @click.option("--output", "-o", help="输出文件路径")
 def deep_cmd(symbol, announcement, count, margin, output):
     try:
         if announcement:
-            click.echo("ℹ️ 公司公告接口正在适配中")
+            click.echo("该功能暂未开发，后续版本支持")
         elif margin:
-            click.echo("ℹ️ 融资融券接口正在适配中")
+            click.echo("该功能暂未开发，后续版本支持")
         else:
             click.echo("请指定查询类型：--announcement(公司公告) / --margin(融资融券)")
     except Exception as e:
-        click.echo(f"❌ 获取深度资料失败：{str(e)}", err=True)
+        click.echo(f"获取深度资料失败：{str(e)}", err=True)
+
 
 # --------------- 历史数据补全命令 ---------------
 @main.command(name="fill-history", help="补全股票5年历史K线数据\n参数：--days 补全天数，默认1825天（5年）")
 @click.option("--days", default=1825, help="补全历史数据天数")
 def fill_history_cmd(days):
-    from stock_download.task import fill_history_kline
     try:
         fill_history_kline(days)
     except Exception as e:
-        click.echo(f"❌ 历史数据补全失败：{str(e)}", err=True)
+        click.echo(f"历史数据补全失败：{str(e)}", err=True)
+
 
 # --------------- 批量爬取任务命令 ---------------
 @main.command(name="task", help="手动运行分层爬取任务\n参数：--type 任务类型：daily(日级)/weekly(周级)/monthly(月级)")
 @click.option("--type", "-t", required=True, type=click.Choice(['daily', 'weekly', 'monthly']), help="任务类型")
 def task_cmd(type):
-    from stock_download.task import daily_task, monthly_task, weekly_task
     try:
         if type == 'daily':
             daily_task()
@@ -206,24 +226,24 @@ def task_cmd(type):
         elif type == 'monthly':
             monthly_task()
     except Exception as e:
-        click.echo(f"❌ 任务执行失败：{str(e)}", err=True)
+        click.echo(f"任务执行失败：{str(e)}", err=True)
+
 
 # --------------- 定时调度服务命令 ---------------
 @main.command(name="schedule", help="启动定时调度服务，自动按周期运行爬取任务")
 def schedule_cmd():
-    from stock_download.task import start_schedule
     try:
         start_schedule()
     except KeyboardInterrupt:
-        click.echo("\n✅ 调度服务已停止")
+        click.echo("\n调度服务已停止")
     except Exception as e:
         click.echo(f"调度服务启动失败：{str(e)}", err=True)
+
 
 # --------------- 筛选股票命令 ---------------
 @main.command(name="filter-stocks", help="自动筛选沪深主板非ST、市值50-300亿的股票，更新到股票列表.csv")
 @click.option("--update", is_flag=True, help="筛选完成后自动执行全量更新任务")
 def filter_stocks_cmd(update):
-    from stock_download.task import filter_stocks, daily_task, weekly_task, monthly_task
     try:
         click.echo("正在拉取全市场股票数据...")
         filtered, output_path = filter_stocks()
@@ -240,31 +260,32 @@ def filter_stocks_cmd(update):
                 weekly_task()
                 click.echo("\n=== 执行月级任务 ===")
                 monthly_task()
-                click.echo("\n✅ 全量数据更新完成")
+                click.echo("\n全量数据更新完成")
             except Exception as e:
-                click.echo(f"❌ 更新失败：{str(e)}", err=True)
+                click.echo(f"更新失败：{str(e)}", err=True)
     except Exception as e:
-        click.echo(f"❌ 筛选股票失败：{str(e)}", err=True)
+        click.echo(f"筛选股票失败：{str(e)}", err=True)
+
 
 # --------------- 导出单股票全量JSON命令 ---------------
 @main.command(name="export-json", help="导出单只/多只股票全量数据为JSON，每个股票一个单独文件保存在data目录\n参数：symbols 股票代码，多个用空格分隔，例如：SZ000001 SH600000")
 @click.argument("symbols", nargs=-1, required=True)
 def export_json_cmd(symbols):
-    from stock_download.utils import DataSaver
     try:
         success_count, failed_count, exported_files = DataSaver.export_stock_json(symbols)
         for file_path in exported_files:
             click.echo(f"已导出：{file_path}")
         click.echo(f"\n导出完成，成功{success_count}只，失败{failed_count}只")
     except Exception as e:
-        click.echo(f"❌ 导出JSON失败：{str(e)}", err=True)
+        click.echo(f"导出JSON失败：{str(e)}", err=True)
+
 
 # --------------- 初始化命令 ---------------
 @main.command(name="init", help="初始化项目，创建所需目录、生成.env模板")
 @click.pass_context
 def init_cmd(ctx):
-    from stock_download.utils import init_project
     try:
+        from stock_download.utils import init_project
         created_dirs, env_template_path = init_project()
         for d in created_dirs:
             click.info(f"创建目录：{d}")
@@ -284,7 +305,7 @@ def init_cmd(ctx):
         click.info("项目初始化完成，现在可以开始使用了！")
         click.info("提示：首次使用建议先运行：python main.py filter-stocks 生成股票列表")
     except Exception as e:
-        click.echo(f"❌ 初始化项目失败：{str(e)}", err=True)
+        click.echo(f"初始化项目失败：{str(e)}", err=True)
 
 
 # --------------- 数据预览命令 ---------------
@@ -294,11 +315,6 @@ def init_cmd(ctx):
 @click.option("--days", "-n", default=10, help="预览历史K线/资金流向的天数，默认10天")
 @click.pass_context
 def preview_cmd(ctx, symbol, type, days):
-    from stock_download.finance import FinanceFetcher
-    from stock_download.money_flow import MoneyFlowFetcher
-    from stock_download.quote import QuoteFetcher
-    from stock_download.utils import validate_stock_code
-
     # 校验股票代码
     valid, msg = validate_stock_code(symbol)
     if not valid:
@@ -338,23 +354,20 @@ def preview_cmd(ctx, symbol, type, days):
     except Exception as e:
         click.error(f"预览失败：{str(e)}")
         if ctx.obj['DEBUG']:
-            import traceback
             traceback.print_exc()
+
 
 # --------------- 自选股一键更新命令 ---------------
 @main.command(name="quote-update", help="一键更新所有自选股票的全量数据，不需要任何参数\n自动读取 ./data/自选股票列表.csv 中的股票，更新实时行情、历史K线、财务数据、资金流向")
 @click.pass_context
 def custom_update_cmd(ctx):
-    from stock_download.task import update_custom_stocks
     try:
         update_custom_stocks()
     except Exception as e:
         click.echo(f"自选股更新失败：{str(e)}", err=True)
         if ctx.obj['DEBUG']:
-            import traceback
             traceback.print_exc()
 
-# --------------- 自选股历史K线增量补全命令 ---------------
 
 # --------------- 数据质量校验命令 ---------------
 @main.command(name="validate-data", help="校验已下载的股票数据质量，生成数据质量报告\n默认校验所有股票所有类型数据，也可指定股票或校验类型")
@@ -366,9 +379,6 @@ def custom_update_cmd(ctx):
 @click.option("--end-date", "-e", default=None, help="K线校验结束日期，默认今日")
 @click.pass_context
 def validate_data_cmd(ctx, symbols, type, auto_fix, start_date, end_date):
-    import pandas as pd
-    from stock_download.utils import validate_stock_data, validate_stock_code
-
     try:
         # 如果没有指定股票，读取股票列表
         if not symbols:
@@ -408,9 +418,8 @@ def validate_data_cmd(ctx, symbols, type, auto_fix, start_date, end_date):
         click.echo(f"发现异常：{fail_count}条")
         click.echo("报告已写入：./data/index/data_quality_report.csv")
     except Exception as e:
-        click.echo(f"❌ 数据校验失败：{str(e)}", err=True)
+        click.echo(f"数据校验失败：{str(e)}", err=True)
         if ctx.obj['DEBUG']:
-            import traceback
             traceback.print_exc()
 
 
