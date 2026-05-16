@@ -2,7 +2,7 @@
 import pandas as pd
 
 from .client import XueqiuClient
-from .config import INDEX_CONFIG, UNIT_CONVERT
+from .config import INDEX_CONFIG
 from .quote import QuoteFetcher
 
 
@@ -36,11 +36,11 @@ class IndexFundFetcher:
                 "板块代码": item.get("symbol"),
                 "板块名称": item.get("name"),
                 "当前价格": item.get("current"),
-                "涨跌幅(%)": round(item.get("percent", 0) * UNIT_CONVERT["percent_multiply"], UNIT_CONVERT["decimal_places"]),
+                "涨跌幅(%)": item.get("percent", 0),
                 "上涨家数": item.get("rise_count"),
                 "下跌家数": item.get("fall_count"),
                 "领涨股": item.get("lead_stock_name"),
-                "领涨股涨跌幅(%)": round(item.get("lead_stock_percent", 0) * UNIT_CONVERT["percent_multiply"], UNIT_CONVERT["decimal_places"])
+                "领涨股涨跌幅(%)": item.get("lead_stock_percent", 0)
             })
 
         return pd.DataFrame(result)
@@ -60,10 +60,10 @@ class IndexFundFetcher:
             "基金名称": data.get("name"),
             "单位净值": data.get("nav"),
             "累计净值": data.get("accumulated_nav"),
-            "涨跌幅(%)": round(data.get("nav_percent", 0) * UNIT_CONVERT["percent_multiply"], UNIT_CONVERT["decimal_places"]),
+            "涨跌幅(%)": data.get("nav_percent", 0),
             "净值日期": data.get("nav_date"),
             "基金类型": data.get("type"),
-            "基金规模(亿)": round(data.get("fund_scale", 0) / UNIT_CONVERT["yuan_to_yi"], UNIT_CONVERT["decimal_places"]),
+            "基金规模(元)": data.get("fund_scale", 0),
             "成立日期": data.get("establish_date")
         }
 

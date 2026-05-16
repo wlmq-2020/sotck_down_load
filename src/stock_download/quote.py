@@ -3,7 +3,7 @@ from typing import List
 import pandas as pd
 
 from .client import XueqiuClient
-from .config import DATA_SCOPE, UNIT_CONVERT
+from .config import DATA_SCOPE
 
 
 class QuoteFetcher:

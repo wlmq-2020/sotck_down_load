@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Union
 
 import pandas as pd
 
-from .config import PATH, UNIT_CONVERT, VALIDATION_THRESHOLD
+from .config import PATH, VALIDATION_THRESHOLD
 
 
 def check_root_dir_py_files() -> None:
@@ -415,13 +415,6 @@ class DataSaver:
 
         return success_count, failed_count, exported_files
 
-    @staticmethod
-    def _convert_unit(data: Union[Dict, List[Dict]]) -> Union[Dict, List[Dict]]:
-        """
-        内部方法：已完全删除单位转换逻辑，直接返回原始数据
-        数据来源：雪球接口原始值，无任何修改
-        """
-        return data
 
     @staticmethod
     def _save_json(data: Union[Dict, List[Dict], pd.DataFrame], file_path: str, mode: str = "cover",
@@ -439,8 +432,6 @@ class DataSaver:
         if isinstance(data, pd.DataFrame):
             data = data.to_dict(orient="records")
 
-        # 单位转换
-        data = DataSaver._convert_unit(data)
 
         # 读取现有文件内容（无论cover还是append模式，只要文件存在就先读取全部内容）
         existing_data = {}
@@ -494,8 +485,6 @@ class DataSaver:
         else:
             df = data.copy()
 
-        # 单位转换
-        df = pd.DataFrame(DataSaver._convert_unit(df.to_dict(orient="records")))
 
         # 保存文件
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -511,8 +500,6 @@ class DataSaver:
         else:
             df = data.copy()
 
-        # 单位转换
-        df = pd.DataFrame(DataSaver._convert_unit(df.to_dict(orient="records")))
 
         # 保存文件
         os.makedirs(os.path.dirname(file_path), exist_ok=True)

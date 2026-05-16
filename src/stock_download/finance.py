@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 
 from .client import XueqiuClient
-from .utils import DataSaver, validate_finance_data, validate_stock_code, write_quality_report
+from .utils import validate_finance_data, validate_stock_code, write_quality_report
 
 
 class FinanceFetcher:
@@ -122,14 +122,6 @@ class FinanceFetcher:
 
         return df
 
-    def save_data(self, data: pd.DataFrame | dict, file_path: str, format: str = "json") -> bool:
-        """保存财务数据到文件
-        :param data: 要保存的数据，支持DataFrame或字典列表
-        :param file_path: 保存文件路径
-        :param format: 保存格式：json/csv/excel
-        :return: 保存成功返回True
-        """
-        return DataSaver.save(data, file_path, format=format)
 
     def get_batch_finance_report(self, symbols: List[str], report_type: str = "all") -> pd.DataFrame:
         """批量获取多只股票的财务数据

@@ -201,29 +201,8 @@ def fill_history_kline(days: int = DATA_SCOPE["default_kline_days"]):
     print(f"===== 开始补全{len(stock_list)}只股票的{days}天历史K线数据 =====")
 
     def fetch_and_fill(code):
-        # 先检查是否已有历史数据
-        json_path = os.path.join("./data/", f"{code}.json")
-        existing_days = 0
-        if os.path.exists(json_path):
-            import json
-            try:
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if isinstance(data, dict) and 'history_kline' in data:
-                        existing_days = len(data['history_kline'])
-            except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
-                # JSON文件损坏时，认为没有历史数据，重新补全
-                print(f"警告：股票{code}的JSON文件损坏，将重新补全历史数据")
-                existing_days = 0
-
-        # 如果已有数据足够，跳过
-        if existing_days >= days:
-            print(f"股票{code}已有{existing_days}天历史数据，跳过")
-            return pd.DataFrame()
-
-        # 计算需要补全的天数
-        need_days = days - existing_days
-        print(f"股票{code}需要补全{need_days}天历史数据")
+        # 直接拉取指定天数的历史K线，增量去重
+        need_days = days
         df = quote_fetcher.get_history_kline(code, need_days)
 
         # 增量更新到JSON
